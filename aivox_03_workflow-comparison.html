@@ -132,7 +132,7 @@ class TradParticle {
     this.stage = 0;
     this.speed = 0.011;
     this.errorBounce = 0;
-    this.maxBounces = 3 + Math.floor(Math.random()*4);
+    this.maxBounces = 2 + Math.floor(Math.random()*4);
     this.bounceCount = 0;
     this.escapeChance = 0.16;
     this.backToDesignChance = 0.14;
@@ -156,7 +156,7 @@ class TradParticle {
             this.stage = 5; // full restart at design
           } else {
             this.bounceCount = 0;
-            this.maxBounces = 3 + Math.floor(Math.random()*4);
+            this.maxBounces = 2 + Math.floor(Math.random()*4);
           }
         }
       } else if (this.stage === 3) {
@@ -306,8 +306,8 @@ function loopArcPt(a, b, t) {
 
 // arc that dips below — used for trad build->engineering restart loop
 function loopArcPtDown(a, b, t) {
-  const midX = (a.x + b.x) / 2;
-  const botY = Math.max(a.y, b.y) + 110;
+  const midX = (a.x + b.x) / 3;
+  const botY = Math.max(a.y, b.y) + 155;
   const c1 = { x: a.x - (a.x-midX)*0.3, y: botY };
   const c2 = { x: b.x + (midX-b.x)*0.3, y: botY };
   const x = Math.pow(1-t,3)*a.x + 3*Math.pow(1-t,2)*t*c1.x + 3*(1-t)*t*t*c2.x + t*t*t*b.x;
@@ -740,10 +740,10 @@ function frame() {
   drawArrow(trad.eng, trad.proto, COL.lineGrey, sc, ox, oy, {alpha:0.55, lw:1.6});
 
   // error bounce between proto and rationalize — double-headed dashed line
-  const errAlpha = 0.5 + 0.18 * Math.sin(pulseT*2.5);
+  const errAlpha = 0.5 + 0.18 * Math.sin(pulseT*1);
   drawArrow(trad.proto, trad.rationalize, COL.errorPurple, sc, ox, oy, {alpha:errAlpha, dashed:true, lw:1.6});
   drawArrow(trad.rationalize, trad.proto, COL.errorPurple, sc, ox, oy, {alpha:errAlpha, dashed:true, lw:1.6});
-  drawLabel('ERROR LOOP', trad.proto.x + 140, (trad.proto.y+trad.rationalize.y)/1.9, COL.errorPurple, sc, ox, oy, {size:16, align:'left', alpha:0.6});
+  drawLabel('ERROR LOOP', trad.proto.x + 140, (trad.proto.y+trad.rationalize.y)/1.6, COL.errorPurple, sc, ox, oy, {size:16, align:'left', alpha:0.6});
 
   // rare escape proto -> build
   drawArrow(trad.proto, trad.build, COL.lineGrey, sc, ox, oy, {alpha:0.4, dashed:true, lw:1.6});
