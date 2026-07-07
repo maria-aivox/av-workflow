@@ -8,7 +8,7 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
     width: 100%; height: 100%;
-    background: #000000;
+    background: #0a0a0b;
     overflow: hidden;
   }
   main { position: relative; width: 100%; height: 100%; }
@@ -31,18 +31,18 @@ function resize() {
 resize();
 window.addEventListener('resize', resize);
 
-const VW = 1180, VH = 920;
+const VW = 1920, VH = 1080;
 
 function getTransform() {
   const sc = Math.min(canvas.width / VW, canvas.height / VH) * 0.94;
-  const ox = (canvas.width  - VW * sc) / 2;
+  const ox = (canvas.width  - VW * sc) / .2;
   const oy = (canvas.height - VH * sc) / 2;
   return { sc, ox, oy };
 }
 
 // ── PALETTE ──────────────────────────────────────────────
 const COL = {
-  bg:     '#000000',
+  bg:     '#000000',     // background
   dim:    '#3a3a48',     // dim traditional connector lines
   design: '#02ffc3',     // design node (both rows)
   eng:    '#48acbf',     // engineering node (both rows)
@@ -59,20 +59,20 @@ const COL = {
 // VH=920 gives room for both rows + gaps
 // ══════════════════════════════════════════════════════════
 
-const COL_PROTO   = 700;
-const COL_BUILD_X = 920;
-const COL_BUILD_W = 150;
-const COL_BUILD_H = 62;
+const COL_PROTO   = 600;
+const COL_BUILD_X = 1050;
+const COL_BUILD_W = 250;
+const COL_BUILD_H = 100;
 
 // ── TRADITIONAL ROW  (top) ───────────────────────────────
-const trY  = 140;        // row horizontal axis
+const trY  = 50;        // row horizontal axis
 const trY2 = trY + 200;  // rationalize node y (below proto)
 
 // ── AIVOX ROW  (bottom) ──────────────────────────────────
-const avY      = 680;    // row horizontal axis — large gap below trad
-const vennR    = 85;
-const vennSide = 112;
-const vennCX   = 380;    // center of venn triangle
+const avY      = 700;    // row horizontal axis — large gap below trad
+const vennR    = 110;
+const vennSide = 150;
+const vennCX   = 100;    // center of venn triangle
 
 const v3 = {
   design:  { x: vennCX - vennSide/2, y: avY - vennSide * 0.44 },
@@ -83,7 +83,7 @@ const aivox = {
   design:  { x: v3.design.x, y: v3.design.y, r: vennR, label: ['DESIGN'] },
   engrat:  { x: v3.engrat.x, y: v3.engrat.y, r: vennR, label: ['ENGINEERING','+ RATIONALIZE'] },
   fab:     { x: v3.fab.x,    y: v3.fab.y,    r: vennR, label: ['FABRICATION','DATA'] },
-  proto:   { x: COL_PROTO,   y: avY,          r: 60,   label: ['PROTOTYPE'] },
+  proto:   { x: COL_PROTO,   y: avY,          r: 100,   label: ['PROTOTYPE'] },
   build:   { x: COL_BUILD_X, y: avY,          r: 0, w: COL_BUILD_W, h: COL_BUILD_H, label: ['BUILD'], rect: true },
 };
 const trackPad = 36;
@@ -97,16 +97,16 @@ const track = {
 
 // trad nodes centered horizontally under vennCX
 const trad = {
-  design:      { x: vennCX - 116, y: trY,  r: 60, label: ['DESIGN'] },
-  eng:         { x: vennCX + 110,       y: trY,  r: 60, label: ['ENGINEERING'] },
-  proto:       { x: COL_PROTO,    y: trY,  r: 60, label: ['PROTOTYPE'] },
-  rationalize: { x: COL_PROTO,    y: trY2, r: 50, label: ['RATIONALIZE'], dashed: true },
+  design:      { x: vennCX - 120, y: trY,  r: 100, label: ['DESIGN'] },
+  eng:         { x: vennCX + 200,       y: trY,  r: 100, label: ['ENGINEERING'] },
+  proto:       { x: COL_PROTO,    y: trY,  r: 100, label: ['PROTOTYPE'] },
+  rationalize: { x: COL_PROTO,    y: trY2, r: 70, label: ['RATIONALIZE'], dashed: true },
   build:       { x: COL_BUILD_X,  y: trY,  r: 0, w: COL_BUILD_W, h: COL_BUILD_H, label: ['BUILD'], rect: true },
 };
 
 // ── OUTER FILLET RECTS ────────────────────────────────────
-const rowPad = 50;
-const rowR   = 24;
+const rowPad = 70;
+const rowR   = 50;
 
 function getTradRect() {
   const x = trad.design.x - trad.design.r - rowPad;
@@ -699,7 +699,7 @@ function frame() {
   // ── compute outer rects ──
   const tradRect  = getTradRect();
   const aivoxRect = getAivoxRect();
-  const titleX    = 5;   // left edge of titles
+  const titleX    = -350;   // left edge of titles
 
   // ── OUTER FILLET RECTS — drawn first, under nodes ──
   drawRoundedRectTrack(tradRect,  COL.textDim, sc, ox, oy, {alpha:0.2, lw:1.4});
@@ -708,7 +708,7 @@ function frame() {
   // ── TITLES — centered to rect mid-y, connector to rect left edge ──
   const tradMidY = trY;      // align to the node row, not the rect center
   const avMidY   = aivoxRect.y + aivoxRect.h / 2;
-  const fontSize = 20;  // viewbox units
+  const fontSize = 30;  // viewbox units
 
   // measure text width using canvas (accurate)
   ctx.font = `400 ${fontSize * sc}px 'JetBrains Mono', monospace`;
@@ -716,21 +716,21 @@ function frame() {
   const avTW   = ctx.measureText('AIVOX').width / sc;
 
   // TRADITIONAL
-  drawLabel('TRADITIONAL', titleX, tradMidY, COL.textDim, sc, ox, oy, {size:fontSize, align:'left', alpha:0.65, weight:400, baseline:'middle'});
+  drawLabel('TRADITIONAL', titleX, tradMidY, COL.textDim, sc, ox, oy, {size:fontSize, align:'center', alpha:0.65, weight:400, baseline:'middle'});
   ctx.save();
   ctx.strokeStyle = COL.textDim; ctx.globalAlpha = 0.35; ctx.lineWidth = 1*sc;
   ctx.beginPath();
-  ctx.moveTo((titleX + tradTW + 10)*sc+ox, tradMidY*sc+oy);
+  ctx.moveTo((titleX + tradTW - 90)*sc+ox, tradMidY*sc+oy);
   ctx.lineTo(tradRect.x*sc+ox,             tradMidY*sc+oy);
   ctx.stroke();
   ctx.restore();
 
   // AIVOX
-  drawLabel('AIVOX', titleX, avMidY, COL.design, sc, ox, oy, {size:fontSize, align:'left', alpha:0.8, weight:400, baseline:'middle'});
+  drawLabel('AIVOX', titleX, avMidY, COL.design, sc, ox, oy, {size:fontSize, align:'center', alpha:0.8, weight:400, baseline:'middle'});
   ctx.save();
   ctx.strokeStyle = COL.design; ctx.globalAlpha = 0.35; ctx.lineWidth = 1*sc;
   ctx.beginPath();
-  ctx.moveTo((titleX + avTW + 10)*sc+ox, avMidY*sc+oy);
+  ctx.moveTo((titleX + avTW -30)*sc+ox, avMidY*sc+oy);
   ctx.lineTo(aivoxRect.x*sc+ox,          avMidY*sc+oy);
   ctx.stroke();
   ctx.restore();
@@ -751,7 +751,7 @@ function frame() {
   // build -> engineering restart loop (dips below)
   const restartAlpha = 0.4 + 0.12 * Math.sin(pulseT*1.8);
   drawLoopArcPathDown(trad.build, trad.eng, COL.lineGrey, sc, ox, oy, {alpha: restartAlpha, lw:1.6});
-  drawLabel(['RESTART IF', 'UNRESOLVED'], trad.rationalize.x, trad.rationalize.y + trad.rationalize.r + 20, COL.textDim, sc, ox, oy, {size:9, align:'center', alpha:0.45});
+  drawLabel(['RESTART IF', 'UNRESOLVED'], trad.rationalize.x, trad.rationalize.y + trad.rationalize.r + 20, COL.textDim, sc, ox, oy, {size:11, align:'center', alpha:0.45});
   drawCircleNode(trad.design, COL.design, sc, ox, oy, {alpha:0.7});
   drawCircleNode(trad.eng, COL.eng, sc, ox, oy, {alpha:0.7});
   drawCircleNode(trad.proto, COL.errorPurple, sc, ox, oy, {alpha:0.75});
