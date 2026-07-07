@@ -702,8 +702,8 @@ function frame() {
   const titleX    = -350;   // left edge of titles
 
   // ── OUTER FILLET RECTS — drawn first, under nodes ──
-  drawRoundedRectTrack(tradRect,  COL.textDim, sc, ox, oy, {alpha:0.2, lw:1.4});
-  drawRoundedRectTrack(aivoxRect, COL.design,  sc, ox, oy, {alpha:0.2, lw:1.4});
+  drawRoundedRectTrack(tradRect,  COL.textDim, sc, ox, oy, {alpha:0.4, lw:1.4});
+  drawRoundedRectTrack(aivoxRect, COL.design,  sc, ox, oy, {alpha:0.4, lw:1.4});
 
   // ── TITLES — centered to rect mid-y, connector to rect left edge ──
   const tradMidY = trY;      // align to the node row, not the rect center
@@ -718,7 +718,7 @@ function frame() {
   // TRADITIONAL
   drawLabel('TRADITIONAL', titleX, tradMidY, COL.textDim, sc, ox, oy, {size:fontSize, align:'center', alpha:0.65, weight:400, baseline:'middle'});
   ctx.save();
-  ctx.strokeStyle = COL.textDim; ctx.globalAlpha = 0.35; ctx.lineWidth = 1*sc;
+  ctx.strokeStyle = COL.textDim; ctx.globalAlpha = 0.8; ctx.lineWidth = 1*sc;
   ctx.beginPath();
   ctx.moveTo((titleX + tradTW - 90)*sc+ox, tradMidY*sc+oy);
   ctx.lineTo(tradRect.x*sc+ox,             tradMidY*sc+oy);
@@ -728,7 +728,7 @@ function frame() {
   // AIVOX
   drawLabel('AIVOX', titleX, avMidY, COL.design, sc, ox, oy, {size:fontSize, align:'center', alpha:0.8, weight:400, baseline:'middle'});
   ctx.save();
-  ctx.strokeStyle = COL.design; ctx.globalAlpha = 0.35; ctx.lineWidth = 1*sc;
+  ctx.strokeStyle = COL.design; ctx.globalAlpha = 0.8; ctx.lineWidth = 1*sc;
   ctx.beginPath();
   ctx.moveTo((titleX + avTW -30)*sc+ox, avMidY*sc+oy);
   ctx.lineTo(aivoxRect.x*sc+ox,          avMidY*sc+oy);
@@ -736,36 +736,36 @@ function frame() {
   ctx.restore();
 
   // ══ TRADITIONAL ROW ══
-  drawArrow(trad.design, trad.eng, COL.lineGrey, sc, ox, oy, {alpha:0.55, lw:1.6});
-  drawArrow(trad.eng, trad.proto, COL.lineGrey, sc, ox, oy, {alpha:0.55, lw:1.6});
+  drawArrow(trad.design, trad.eng, COL.lineGrey, sc, ox, oy, {alpha:0.8, lw:1.6});
+  drawArrow(trad.eng, trad.proto, COL.lineGrey, sc, ox, oy, {alpha:0.8, lw:1.6});
 
   // error bounce between proto and rationalize — double-headed dashed line
   const errAlpha = 0.5 + 0.18 * Math.sin(pulseT*1);
   drawArrow(trad.proto, trad.rationalize, COL.errorPurple, sc, ox, oy, {alpha:errAlpha, dashed:true, lw:1.6});
   drawArrow(trad.rationalize, trad.proto, COL.errorPurple, sc, ox, oy, {alpha:errAlpha, dashed:true, lw:1.6});
-  drawLabel('ERROR LOOP', trad.proto.x + 140, (trad.proto.y+trad.rationalize.y)/1.6, COL.errorPurple, sc, ox, oy, {size:16, align:'left', alpha:0.6});
+  drawLabel('ERROR LOOP', trad.proto.x + 140, (trad.proto.y+trad.rationalize.y)/1.6, COL.errorPurple, sc, ox, oy, {size:16, align:'left', alpha:0.8});
 
   // rare escape proto -> build
-  drawArrow(trad.proto, trad.build, COL.lineGrey, sc, ox, oy, {alpha:0.4, dashed:true, lw:1.6});
+  drawArrow(trad.proto, trad.build, COL.lineGrey, sc, ox, oy, {alpha:0.8, dashed:true, lw:1.6});
 
   // build -> engineering restart loop (dips below)
   const restartAlpha = 0.4 + 0.12 * Math.sin(pulseT*1.8);
   drawLoopArcPathDown(trad.build, trad.eng, COL.lineGrey, sc, ox, oy, {alpha: restartAlpha, lw:1.6});
-  drawLabel(['RESTART IF', 'UNRESOLVED'], trad.rationalize.x, trad.rationalize.y + trad.rationalize.r + 30, COL.textDim, sc, ox, oy, {size:16, align:'center', alpha:0.45});
-  drawCircleNode(trad.design, COL.design, sc, ox, oy, {alpha:0.7});
-  drawCircleNode(trad.eng, COL.eng, sc, ox, oy, {alpha:0.7});
-  drawCircleNode(trad.proto, COL.errorPurple, sc, ox, oy, {alpha:0.75});
-  drawCircleNode(trad.rationalize, COL.errorPurple, sc, ox, oy, {dashed:true, alpha:0.65});
-  drawRectNode(trad.build, tradBall.everSucceeded ? COL.buildGood : COL.buildBad, sc, ox, oy, {alpha:0.6});
+  drawLabel(['RESTART IF', 'UNRESOLVED'], trad.rationalize.x, trad.rationalize.y + trad.rationalize.r + 30, COL.textDim, sc, ox, oy, {size:16, align:'center', alpha:0.8});
+  drawCircleNode(trad.design, COL.design, sc, ox, oy, {alpha:0.8});
+  drawCircleNode(trad.eng, COL.eng, sc, ox, oy, {alpha:0.8});
+  drawCircleNode(trad.proto, COL.errorPurple, sc, ox, oy, {alpha:0.8});
+  drawCircleNode(trad.rationalize, COL.errorPurple, sc, ox, oy, {dashed:true, alpha:0.8});
+  drawRectNode(trad.build, tradBall.everSucceeded ? COL.buildGood : COL.buildBad, sc, ox, oy, {alpha:0.8});
 
   // single project ball — traditional
   tradBall.update();
   drawParticle(tradBall.getPos(), tradBall.color(), sc, ox, oy, 4.2);
 
   // ══ AIVOX ROW ══
-  drawArrow(aivox.proto, aivox.build, COL.lineGrey, sc, ox, oy, {alpha:0.45, lw:1.6});
+  drawArrow(aivox.proto, aivox.build, COL.lineGrey, sc, ox, oy, {alpha:0.8, lw:1.6});
   const trackExit = { x: track.x + track.w, y: aivox.proto.y };
-  drawArrow(trackExit, aivox.proto, COL.errorPurple, sc, ox, oy, {alpha:0.35, dashed:true, lw:1.6});
+  drawArrow(trackExit, aivox.proto, COL.errorPurple, sc, ox, oy, {alpha:0.8, dashed:true, lw:1.6});
 
   // rounded-rect track that the ball loops around (design / engrat / fab)
   const trackAlpha = 0.5 + 0.18 * Math.sin(pulseT*2.2);
