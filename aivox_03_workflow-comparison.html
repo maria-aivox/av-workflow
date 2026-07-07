@@ -36,7 +36,7 @@ const VW = 1920, VH = 1080;
 function getTransform() {
   const sc = Math.min(canvas.width / VW, canvas.height / VH) * 0.94;
   const ox = (canvas.width  - VW * sc) / .2;
-  const oy = (canvas.height - VH * sc) / 2;
+  const oy = (canvas.height - VH * sc) / 1.7;
   return { sc, ox, oy };
 }
 
