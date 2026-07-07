@@ -743,7 +743,7 @@ function frame() {
   const errAlpha = 0.5 + 0.18 * Math.sin(pulseT*2.5);
   drawArrow(trad.proto, trad.rationalize, COL.errorPurple, sc, ox, oy, {alpha:errAlpha, dashed:true, lw:1.6});
   drawArrow(trad.rationalize, trad.proto, COL.errorPurple, sc, ox, oy, {alpha:errAlpha, dashed:true, lw:1.6});
-  drawLabel('ERROR LOOP', trad.proto.x + 60, (trad.proto.y+trad.rationalize.y)/2, COL.errorPurple, sc, ox, oy, {size:9, align:'left', alpha:0.6});
+  drawLabel('ERROR LOOP', trad.proto.x + 140, (trad.proto.y+trad.rationalize.y)/1.9, COL.errorPurple, sc, ox, oy, {size:16, align:'left', alpha:0.6});
 
   // rare escape proto -> build
   drawArrow(trad.proto, trad.build, COL.lineGrey, sc, ox, oy, {alpha:0.4, dashed:true, lw:1.6});
@@ -751,7 +751,7 @@ function frame() {
   // build -> engineering restart loop (dips below)
   const restartAlpha = 0.4 + 0.12 * Math.sin(pulseT*1.8);
   drawLoopArcPathDown(trad.build, trad.eng, COL.lineGrey, sc, ox, oy, {alpha: restartAlpha, lw:1.6});
-  drawLabel(['RESTART IF', 'UNRESOLVED'], trad.rationalize.x, trad.rationalize.y + trad.rationalize.r + 20, COL.textDim, sc, ox, oy, {size:11, align:'center', alpha:0.45});
+  drawLabel(['RESTART IF', 'UNRESOLVED'], trad.rationalize.x, trad.rationalize.y + trad.rationalize.r + 30, COL.textDim, sc, ox, oy, {size:16, align:'center', alpha:0.45});
   drawCircleNode(trad.design, COL.design, sc, ox, oy, {alpha:0.7});
   drawCircleNode(trad.eng, COL.eng, sc, ox, oy, {alpha:0.7});
   drawCircleNode(trad.proto, COL.errorPurple, sc, ox, oy, {alpha:0.75});
