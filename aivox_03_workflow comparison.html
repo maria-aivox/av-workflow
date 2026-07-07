@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>AIVOX — Process Pipeline</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #0a0a0b;
+    overflow: hidden;
+  }
+  main { position: relative; width: 100%; height: 100%; }
+  canvas { display: block; width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<main>
+  <canvas id="c"></canvas>
+</main>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+function resize() {
+  canvas.width  = canvas.offsetWidth  || window.innerWidth;
+  canvas.height = canvas.offsetHeight || window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+const VW = 1180, VH = 920;
+
+function getTransform() {
+  const sc = Math.min(canvas.width / VW, canvas.height / VH) * 0.94;
+  const ox = (canvas.width  - VW * sc) / 2;
+  const oy = (canvas.height - VH * sc) / 2;
+  return { sc, ox, oy };
+}
+
+// ── PALETTE ──────────────────────────────────────────────
+const COL = {
+  bg:     '#0a0a0b',
+  dim:    '#3a3a48',     // dim traditional connector lines
+  design: '#02ffc3',     // design node (both rows)
+  eng:    '#48acbf',     // engineering node (both rows)
+  fab:    '#d0c08e',     // fabrication data node
+  errorPurple: '#a961b8', // prototype + rationalize (magenta)
+  buildGood: '#02ffc3',  // build, when resolved
+  buildBad:  '#d0c08e',  // build, when sent back (failed)
+  textDim:'#c4c4c4',     // general non-accent text
+  lineGrey: '#888892',   // all non-bubble connector lines
+};
+
+// ══════════════════════════════════════════════════════════
+// LAYOUT — two clearly separated rows, no overlap
+// VH=920 gives room for both rows + gaps
+// ══════════════════════════════════════════════════════════
+
+const COL_PROTO   = 700;
+const COL_BUILD_X = 920;
+const COL_BUILD_W = 150;
+const COL_BUILD_H = 62;
+
+// ── TRADITIONAL ROW  (top) ───────────────────────────────
+const trY  = 140;        // row horizontal axis
+const trY2 = trY + 200;  // rationalize node y (below proto)
+
+// ── AIVOX ROW  (bottom) ──────────────────────────────────
+const avY      = 680;    // row horizontal axis — large gap below trad
+const vennR    = 85;
+const vennSide = 112;
+const vennCX   = 380;    // center of venn triangle
+
+const v3 = {
+  design:  { x: vennCX - vennSide/2, y: avY - vennSide * 0.44 },
+  engrat:  { x: vennCX + vennSide/2, y: avY - vennSide * 0.44 },
+  fab:     { x: vennCX,              y: avY + vennSide * 0.56  },
+};
+const aivox = {
+  design:  { x: v3.design.x, y: v3.design.y, r: vennR, label: ['DESIGN'] },
+  engrat:  { x: v3.engrat.x, y: v3.engrat.y, r: vennR, label: ['ENGINEERING','+ RATIONALIZE'] },
+  fab:     { x: v3.fab.x,    y: v3.fab.y,    r: vennR, label: ['FABRICATION','DATA'] },
+  proto:   { x: COL_PROTO,   y: avY,          r: 60,   label: ['PROTOTYPE'] },
+  build:   { x: COL_BUILD_X, y: avY,          r: 0, w: COL_BUILD_W, h: COL_BUILD_H, label: ['BUILD'], rect: true },
+};
+const trackPad = 36;
+const track = {
+  x: Math.min(v3.design.x, v3.engrat.x, v3.fab.x) - vennR - trackPad,
+  y: Math.min(v3.design.y, v3.engrat.y, v3.fab.y) - vennR - trackPad,
+  get w() { return Math.max(v3.design.x, v3.engrat.x, v3.fab.x) + vennR + trackPad - this.x; },
+  get h() { return Math.max(v3.design.y, v3.engrat.y, v3.fab.y) + vennR + trackPad - this.y; },
+  radius: 62,
+};
+
+// trad nodes centered horizontally under vennCX
+const trad = {
+  design:      { x: vennCX - 116, y: trY,  r: 60, label: ['DESIGN'] },
+  eng:         { x: vennCX + 110,       y: trY,  r: 60, label: ['ENGINEERING'] },
+  proto:       { x: COL_PROTO,    y: trY,  r: 60, label: ['PROTOTYPE'] },
+  rationalize: { x: COL_PROTO,    y: trY2, r: 50, label: ['RATIONALIZE'], dashed: true },
+  build:       { x: COL_BUILD_X,  y: trY,  r: 0, w: COL_BUILD_W, h: COL_BUILD_H, label: ['BUILD'], rect: true },
+};
+
+// ── OUTER FILLET RECTS ────────────────────────────────────
+const rowPad = 50;
+const rowR   = 24;
+
+function getTradRect() {
+  const x = trad.design.x - trad.design.r - rowPad;
+  const y = trad.design.y - trad.design.r - rowPad;
+  const w = (trad.build.x + trad.build.w/2 + rowPad) - x;
+  const h = (trad.rationalize.y + trad.rationalize.r + rowPad) - y;
+  return { x, y, w, h, radius: rowR };
+}
+function getAivoxRect() {
+  const x = track.x - rowPad;
+  const y = Math.min(track.y, avY - aivox.proto.r) - rowPad;
+  const w = (aivox.build.x + aivox.build.w/2 + rowPad) - x;
+  const h = (Math.max(track.y + track.h, avY + aivox.proto.r) + rowPad) - y;
+  return { x, y, w, h, radius: rowR };
+}
+
+// ── single-ball particle systems — one project moving through each pipeline ──
+// Traditional: DESIGN -> ENGINEERING -> PROTOTYPE <-> RATIONALIZE (stuck error loop)
+// 0:design->eng 1:eng->proto 2:proto<->rationalize(error) 3:proto->build 4:build->eng(restart-bad) 5:rationalize->design(full restart)
+class TradParticle {
+  constructor() {
+    this.t = 0;
+    this.stage = 0;
+    this.speed = 0.011;
+    this.errorBounce = 0;
+    this.maxBounces = 3 + Math.floor(Math.random()*4);
+    this.bounceCount = 0;
+    this.escapeChance = 0.16;
+    this.backToDesignChance = 0.14;
+    this.everSucceeded = false; // becomes true once it reaches build cleanly
+    this.atBuild = false;       // true while resting at build node
+  }
+  update() {
+    this.t += this.speed;
+    if (this.t >= 1) {
+      this.t = 0;
+      if (this.stage === 0) this.stage = 1;
+      else if (this.stage === 1) this.stage = 2;
+      else if (this.stage === 2) {
+        this.bounceCount++;
+        this.errorBounce = 1 - this.errorBounce;
+        if (this.bounceCount >= this.maxBounces) {
+          const roll = Math.random();
+          if (roll < this.escapeChance) {
+            this.stage = 3; // escape to build
+          } else if (roll < this.escapeChance + this.backToDesignChance) {
+            this.stage = 5; // full restart at design
+          } else {
+            this.bounceCount = 0;
+            this.maxBounces = 3 + Math.floor(Math.random()*4);
+          }
+        }
+      } else if (this.stage === 3) {
+        this.atBuild = true;
+        this.everSucceeded = true;
+        this.stage = 4; // build -> back to engineering (rework cycle continues)
+      } else if (this.stage === 4) {
+        this.atBuild = false;
+        this.stage = 1;
+        this.bounceCount = 0;
+      } else if (this.stage === 5) {
+        this.stage = 0;
+        this.bounceCount = 0;
+      }
+    }
+  }
+  getPos() {
+    if (this.stage === 0) return lerpPt(trad.design, trad.eng, this.t);
+    if (this.stage === 1) return lerpPt(trad.eng, trad.proto, this.t);
+    if (this.stage === 2) {
+      return this.errorBounce === 0
+        ? lerpPt(trad.proto, trad.rationalize, this.t)
+        : lerpPt(trad.rationalize, trad.proto, this.t);
+    }
+    if (this.stage === 3) return lerpPt(trad.proto, trad.build, this.t);
+    if (this.stage === 4) return loopArcPtDown(trad.build, trad.eng, this.t);
+    if (this.stage === 5) return loopArcPtDown(trad.rationalize, trad.design, this.t);
+    return trad.design;
+  }
+  color() {
+    if (this.stage === 0) return COL.design;
+    if (this.stage === 1) return COL.eng;
+    if (this.stage === 2) return COL.errorPurple;
+    if (this.stage === 3) return COL.buildBad;   // arriving at build still uncertain
+    if (this.stage === 4) return COL.buildBad;   // sent back — failed
+    if (this.stage === 5) return COL.errorPurple;
+    return COL.design;
+  }
+}
+
+// AIVOX: single ball loops DESIGN -> ENG+RATIONALIZE -> FAB DATA -> (arc back to DESIGN)
+// pattern: loop x3 -> peel to PROTOTYPE -> back into loop x1 -> loop x3 more -> PROTOTYPE -> BUILD (success, stays)
+class AivoxParticle {
+  constructor() {
+    this.t = 0;
+    this.speed = 0.012;
+    this.lapCount = 0;
+    this.phase = 'loop1';
+    this.lapTarget = 3;
+    this.done = false;
+  }
+  update() {
+    if (this.done) {
+      this.doneTimer = (this.doneTimer || 0) + 1;
+      if (this.doneTimer > 90) { // brief pause at build, then restart for demo purposes
+        this.phase = 'loop1'; this.lapCount = 0; this.done = false; this.doneTimer = 0;
+      }
+      return;
+    }
+    this.t += this.speed;
+    if (this.t < 1) return;
+    this.t = 0;
+
+    if (this.phase === 'loop1') {
+      this.lapCount++;
+      if (this.lapCount >= this.lapTarget) { this.phase = 'toProto1'; this.lapCount = 0; }
+    } else if (this.phase === 'toProto1') {
+      this.phase = 'backToLoop';
+    } else if (this.phase === 'backToLoop') {
+      this.phase = 'loop2'; this.lapCount = 0;
+    } else if (this.phase === 'loop2') {
+      this.lapCount++;
+      if (this.lapCount >= 1) { this.phase = 'loop3'; this.lapCount = 0; }
+    } else if (this.phase === 'loop3') {
+      this.lapCount++;
+      if (this.lapCount >= 3) { this.phase = 'toProto2'; this.lapCount = 0; }
+    } else if (this.phase === 'toProto2') {
+      this.phase = 'toBuild';
+    } else if (this.phase === 'toBuild') {
+      this.phase = 'done';
+      this.done = true; // single project: stays resolved at build
+    }
+  }
+  // one lap = continuous travel around the rounded-rect track perimeter
+  getLapPos(t) {
+    return trackPerimeterPt(track, t);
+  }
+  getPos() {
+    switch (this.phase) {
+      case 'loop1':
+      case 'loop2':
+      case 'loop3':
+        return this.getLapPos(this.t);
+      case 'toProto1':
+      case 'toProto2': {
+        // peel off from track right-middle toward proto
+        const trackExit = { x: track.x + track.w, y: track.y + track.h/2 };
+        return lerpPt(trackExit, aivox.proto, this.t);
+      }
+      case 'backToLoop': {
+        const trackEntry = { x: track.x + track.w, y: aivox.proto.y };
+        return lerpPt(aivox.proto, trackEntry, this.t);
+      }
+      case 'toBuild':
+        return lerpPt(aivox.proto, aivox.build, this.t);
+      case 'done':
+        return aivox.build;
+    }
+    return aivox.design;
+  }
+  color() {
+    switch (this.phase) {
+      case 'loop1': case 'loop2': case 'loop3': {
+        const pos = this.getLapPos(this.t);
+        const dDesign = Math.abs(pos.x - aivox.design.x);
+        const dEng    = Math.abs(pos.x - aivox.engrat.x);
+        const dFab    = Math.abs(pos.x - aivox.fab.x);
+        const m = Math.min(dDesign, dEng, dFab);
+        if (m === dDesign) return COL.design;
+        if (m === dEng) return COL.eng;
+        return COL.fab;
+      }
+      case 'toProto1':
+      case 'toProto2':
+      case 'backToLoop':
+        return COL.errorPurple;
+      case 'toBuild':
+      case 'done':
+        return COL.buildGood;
+    }
+    return COL.design;
+  }
+}
+
+// wide arc that sweeps from fab, up and over, back to design (visually unifies all 3 nodes as one loop)
+function loopArcPt(a, b, t) {
+  const midX = (a.x + b.x) / 2;
+  const topY = Math.min(a.y, b.y) - 90;
+  // cubic-ish path using two control points for a wide smooth arc
+  const c1 = { x: a.x - (a.x-midX)*0.3, y: topY };
+  const c2 = { x: b.x + (midX-b.x)*0.3, y: topY };
+  // cubic bezier
+  const x = Math.pow(1-t,3)*a.x + 3*Math.pow(1-t,2)*t*c1.x + 3*(1-t)*t*t*c2.x + t*t*t*b.x;
+  const y = Math.pow(1-t,3)*a.y + 3*Math.pow(1-t,2)*t*c1.y + 3*(1-t)*t*t*c2.y + t*t*t*b.y;
+  return { x, y };
+}
+
+// arc that dips below — used for trad build->engineering restart loop
+function loopArcPtDown(a, b, t) {
+  const midX = (a.x + b.x) / 2;
+  const botY = Math.max(a.y, b.y) + 110;
+  const c1 = { x: a.x - (a.x-midX)*0.3, y: botY };
+  const c2 = { x: b.x + (midX-b.x)*0.3, y: botY };
+  const x = Math.pow(1-t,3)*a.x + 3*Math.pow(1-t,2)*t*c1.x + 3*(1-t)*t*t*c2.x + t*t*t*b.x;
+  const y = Math.pow(1-t,3)*a.y + 3*Math.pow(1-t,2)*t*c1.y + 3*(1-t)*t*t*c2.y + t*t*t*b.y;
+  return { x, y };
+}
+
+// point at parameter t (0..1) along a rounded-rect perimeter, clockwise,
+// starting at the right-middle edge (so it flows naturally from fab back around to design)
+function trackPerimeterPt(rect, t) {
+  const { x, y, w, h, radius: r } = rect;
+  const straightW = w - 2*r;
+  const straightH = h - 2*r;
+  const arcLen = (Math.PI/2) * r;
+  const perimeter = 2*straightW + 2*straightH + 4*arcLen;
+
+  let d = ((t % 1) + 1) % 1 * perimeter;
+
+  const rightStraightHalf = straightH/2;
+  if (d < rightStraightHalf) {
+    return { x: x+w, y: y+h/2 + d };
+  }
+  d -= rightStraightHalf;
+
+  if (d < arcLen) {
+    const ang = (d/arcLen) * (Math.PI/2);
+    const cx = x+w-r, cy = y+h-r;
+    return { x: cx + r*Math.cos(ang), y: cy + r*Math.sin(ang) };
+  }
+  d -= arcLen;
+
+  if (d < straightW) {
+    return { x: x+w-r-d, y: y+h };
+  }
+  d -= straightW;
+
+  if (d < arcLen) {
+    const ang = Math.PI/2 + (d/arcLen) * (Math.PI/2);
+    const cx = x+r, cy = y+h-r;
+    return { x: cx + r*Math.cos(ang), y: cy + r*Math.sin(ang) };
+  }
+  d -= arcLen;
+
+  if (d < straightH) {
+    return { x: x, y: y+h-r-d };
+  }
+  d -= straightH;
+
+  if (d < arcLen) {
+    const ang = Math.PI + (d/arcLen) * (Math.PI/2);
+    const cx = x+r, cy = y+r;
+    return { x: cx + r*Math.cos(ang), y: cy + r*Math.sin(ang) };
+  }
+  d -= arcLen;
+
+  if (d < straightW) {
+    return { x: x+r+d, y: y };
+  }
+  d -= straightW;
+
+  if (d < arcLen) {
+    const ang = 1.5*Math.PI + (d/arcLen) * (Math.PI/2);
+    const cx = x+w-r, cy = y+r;
+    return { x: cx + r*Math.cos(ang), y: cy + r*Math.sin(ang) };
+  }
+  d -= arcLen;
+
+  return { x: x+w, y: y + r + d };
+}
+
+function drawRoundedRectTrack(rect, color, sc, ox, oy, opts={}) {
+  const { x, y, w, h, radius: r } = rect;
+  const X = x*sc+ox, Y = y*sc+oy, W = w*sc, H = h*sc, R = r*sc;
+  ctx.beginPath();
+  ctx.moveTo(X+R, Y);
+  ctx.lineTo(X+W-R, Y);
+  ctx.arcTo(X+W, Y, X+W, Y+R, R);
+  ctx.lineTo(X+W, Y+H-R);
+  ctx.arcTo(X+W, Y+H, X+W-R, Y+H, R);
+  ctx.lineTo(X+R, Y+H);
+  ctx.arcTo(X, Y+H, X, Y+H-R, R);
+  ctx.lineTo(X, Y+R);
+  ctx.arcTo(X, Y, X+R, Y, R);
+  ctx.closePath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = (opts.lw || 1.4) * sc;
+  ctx.globalAlpha = opts.alpha ?? 0.4;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+function lerpPt(a, b, t) {
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+}
+// arc point with a vertical bulge (below if down=true, above if false)
+function arcPt(a, b, t, bulge, down) {
+  const mx = (a.x + b.x) / 2;
+  const my = (a.y + b.y) / 2 + (down ? bulge : bulge);
+  // quadratic bezier a -> control(mx,my) -> b
+  const x = (1-t)*(1-t)*a.x + 2*(1-t)*t*mx + t*t*b.x;
+  const y = (1-t)*(1-t)*a.y + 2*(1-t)*t*my + t*t*b.y;
+  return { x, y };
+}
+
+const tradBall = new TradParticle();
+const aivoxBall = new AivoxParticle();
+
+// ── drawing helpers ───────────────────────────────────────
+function drawCircleNode(n, color, sc, ox, oy, opts={}) {
+  const cx = n.x * sc + ox, cy = n.y * sc + oy, r = n.r * sc;
+
+  if (opts.glow) {
+    const g = ctx.createRadialGradient(cx, cy, r*0.3, cx, cy, r*1.8);
+    g.addColorStop(0, color + '40');
+    g.addColorStop(1, color + '00');
+    ctx.beginPath(); ctx.arc(cx, cy, r*1.8, 0, Math.PI*2);
+    ctx.fillStyle = g; ctx.fill();
+  }
+
+  if (opts.doubleRing) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r*1.18, 0, Math.PI*2);
+    ctx.strokeStyle = COL.eng;
+    ctx.lineWidth = 1 * sc;
+    ctx.globalAlpha = 0.5;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI*2);
+  ctx.fillStyle = '#0a0a0b';
+  ctx.fill();
+  ctx.lineWidth = (opts.lineWidth || 1.3) * sc;
+  ctx.strokeStyle = color;
+  if (opts.dashed) ctx.setLineDash([4*sc, 4*sc]);
+  else ctx.setLineDash([]);
+  ctx.globalAlpha = opts.alpha ?? 1;
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+
+  // label
+  const fsize = Math.max(7, r * 0.22);
+  ctx.font = `400 ${fsize}px 'JetBrains Mono', monospace`;
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const lh = fsize * 1.25;
+  const startY = cy - ((n.label.length-1) * lh) / 2;
+  n.label.forEach((line, i) => ctx.fillText(line, cx, startY + i*lh));
+}
+
+function drawRectNode(n, color, sc, ox, oy, opts={}) {
+  const cx = n.x * sc + ox, cy = n.y * sc + oy;
+  const w = n.w * sc, h = n.h * sc;
+
+  if (opts.glow) {
+    const g = ctx.createRadialGradient(cx, cy, w*0.1, cx, cy, w*0.8);
+    g.addColorStop(0, color + '30');
+    g.addColorStop(1, color + '00');
+    ctx.beginPath(); ctx.arc(cx, cy, w*0.8, 0, Math.PI*2);
+    ctx.fillStyle = g; ctx.fill();
+  }
+
+  ctx.fillStyle = '#0a0a0b';
+  ctx.fillRect(cx - w/2, cy - h/2, w, h);
+  ctx.lineWidth = 1.2 * sc;
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = opts.alpha ?? 1;
+  ctx.strokeRect(cx - w/2, cy - h/2, w, h);
+  ctx.globalAlpha = 1;
+
+  const fsize = Math.max(8, h * 0.22);
+  ctx.font = `500 ${fsize}px 'JetBrains Mono', monospace`;
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(n.label[0], cx, cy);
+}
+
+function drawArrow(a, b, color, sc, ox, oy, opts={}) {
+  const ax = a.x*sc+ox, ay = a.y*sc+oy;
+  const bx = b.x*sc+ox, by = b.y*sc+oy;
+  ctx.beginPath();
+  ctx.moveTo(ax, ay);
+  ctx.lineTo(bx, by);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = (opts.lw || 1.6) * sc;
+  ctx.globalAlpha = opts.alpha ?? 0.4;
+  if (opts.dashed) ctx.setLineDash([4*sc, 4*sc]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+
+  // arrowhead
+  const angle = Math.atan2(by-ay, bx-ax);
+  const headLen = 7 * sc;
+  ctx.beginPath();
+  ctx.moveTo(bx, by);
+  ctx.lineTo(bx - headLen*Math.cos(angle - Math.PI/7), by - headLen*Math.sin(angle - Math.PI/7));
+  ctx.lineTo(bx - headLen*Math.cos(angle + Math.PI/7), by - headLen*Math.sin(angle + Math.PI/7));
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.globalAlpha = opts.alpha ?? 0.4;
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+function drawArcPath(a, b, bulge, down, color, sc, ox, oy, opts={}) {
+  const steps = 40;
+  ctx.beginPath();
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const p = arcPt(a, b, t, bulge, down);
+    const x = p.x*sc+ox, y = p.y*sc+oy;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = color;
+  ctx.lineWidth = (opts.lw || 1.6) * sc;
+  ctx.globalAlpha = opts.alpha ?? 0.4;
+  if (opts.dashed) ctx.setLineDash([4*sc,4*sc]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+
+  const endT = 0.97;
+  const p1 = arcPt(a,b,endT,bulge,down);
+  const p2 = arcPt(a,b,1,bulge,down);
+  const x1 = p1.x*sc+ox, y1 = p1.y*sc+oy;
+  const x2 = p2.x*sc+ox, y2 = p2.y*sc+oy;
+  const angle = Math.atan2(y2-y1, x2-x1);
+  const headLen = 7*sc;
+  ctx.beginPath();
+  ctx.moveTo(x2,y2);
+  ctx.lineTo(x2-headLen*Math.cos(angle-Math.PI/7), y2-headLen*Math.sin(angle-Math.PI/7));
+  ctx.lineTo(x2-headLen*Math.cos(angle+Math.PI/7), y2-headLen*Math.sin(angle+Math.PI/7));
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.globalAlpha = opts.alpha ?? 0.4;
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+// wide cubic-bezier loop path (mirrors loopArcPt) — visually unifies design/rationalize/fab
+function drawLoopArcPath(a, b, color, sc, ox, oy, opts={}) {
+  const steps = 50;
+  ctx.beginPath();
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const p = loopArcPt(a, b, t);
+    const x = p.x*sc+ox, y = p.y*sc+oy;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = color;
+  ctx.lineWidth = (opts.lw || 1.6) * sc;
+  ctx.globalAlpha = opts.alpha ?? 0.4;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // arrowhead near the end (pointing into design)
+  const p1 = loopArcPt(a, b, 0.95);
+  const p2 = loopArcPt(a, b, 1);
+  const x1 = p1.x*sc+ox, y1 = p1.y*sc+oy;
+  const x2 = p2.x*sc+ox, y2 = p2.y*sc+oy;
+  const angle = Math.atan2(y2-y1, x2-x1);
+  const headLen = 7*sc;
+  ctx.beginPath();
+  ctx.moveTo(x2,y2);
+  ctx.lineTo(x2-headLen*Math.cos(angle-Math.PI/7), y2-headLen*Math.sin(angle-Math.PI/7));
+  ctx.lineTo(x2-headLen*Math.cos(angle+Math.PI/7), y2-headLen*Math.sin(angle+Math.PI/7));
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.globalAlpha = opts.alpha ?? 0.4;
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+// dips-below variant — used for traditional build->engineering restart loop
+function drawLoopArcPathDown(a, b, color, sc, ox, oy, opts={}) {
+  const steps = 50;
+  ctx.beginPath();
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const p = loopArcPtDown(a, b, t);
+    const x = p.x*sc+ox, y = p.y*sc+oy;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = color;
+  ctx.lineWidth = (opts.lw || 1.6) * sc;
+  ctx.globalAlpha = opts.alpha ?? 0.4;
+  ctx.setLineDash([4*sc, 4*sc]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+
+  const p1 = loopArcPtDown(a, b, 0.95);
+  const p2 = loopArcPtDown(a, b, 1);
+  const x1 = p1.x*sc+ox, y1 = p1.y*sc+oy;
+  const x2 = p2.x*sc+ox, y2 = p2.y*sc+oy;
+  const angle = Math.atan2(y2-y1, x2-x1);
+  const headLen = 7*sc;
+  ctx.beginPath();
+  ctx.moveTo(x2,y2);
+  ctx.lineTo(x2-headLen*Math.cos(angle-Math.PI/7), y2-headLen*Math.sin(angle-Math.PI/7));
+  ctx.lineTo(x2-headLen*Math.cos(angle+Math.PI/7), y2-headLen*Math.sin(angle+Math.PI/7));
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.globalAlpha = opts.alpha ?? 0.4;
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+function drawParticle(pos, color, sc, ox, oy, r=3.2) {
+  const x = pos.x*sc+ox, y = pos.y*sc+oy;
+  const g = ctx.createRadialGradient(x,y,0,x,y,r*sc*3);
+  g.addColorStop(0, color);
+  g.addColorStop(1, color+'00');
+  ctx.beginPath(); ctx.arc(x,y,r*sc*3,0,Math.PI*2);
+  ctx.fillStyle = g; ctx.fill();
+
+  ctx.beginPath(); ctx.arc(x,y,r*sc,0,Math.PI*2);
+  ctx.fillStyle = color; ctx.fill();
+}
+
+// ── text labels (row titles, captions) ────────────────────
+function drawLabel(text, x, y, color, sc, ox, oy, opts={}) {
+  const fsize = (opts.size || 11) * sc;
+  ctx.font = `${opts.weight || 400} ${fsize}px 'JetBrains Mono', monospace`;
+  ctx.fillStyle = color;
+  ctx.textAlign = opts.align || 'left';
+  ctx.textBaseline = opts.baseline || 'alphabetic';
+  ctx.globalAlpha = opts.alpha ?? 1;
+  if (Array.isArray(text)) {
+    const lh = fsize * 1.3;
+    text.forEach((line,i) => ctx.fillText(line, x*sc+ox, (y*sc+oy) + i*lh));
+  } else {
+    ctx.fillText(text, x*sc+ox, y*sc+oy);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Venn-style: semi-transparent fill + stroke + glow + label
+function drawVennNode(n, color, sc, ox, oy) {
+  const cx = n.x*sc+ox, cy = n.y*sc+oy, r = n.r*sc;
+
+  // glow
+  const g = ctx.createRadialGradient(cx, cy, r*0.3, cx, cy, r*1.6);
+  g.addColorStop(0, color + '35');
+  g.addColorStop(1, color + '00');
+  ctx.beginPath(); ctx.arc(cx, cy, r*1.6, 0, Math.PI*2);
+  ctx.fillStyle = g; ctx.fill();
+
+  // semi-transparent fill so overlaps are visible
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
+  ctx.fillStyle = color + '14';  // ~8% opacity tinted fill
+  ctx.fill();
+
+  // stroke
+  ctx.lineWidth = 1.4 * sc;
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = 0.75;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // label
+  const fsize = Math.max(7, Math.min(r * 0.18, 11));
+  ctx.font = `300 ${fsize}px 'JetBrains Mono', monospace`;
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const lh = fsize * 1.25;
+  const startY = cy - ((n.lines||n.label).length-1)*lh/2;
+  (n.lines||n.label).forEach((line,i) => ctx.fillText(line, cx, startY+i*lh));
+}
+
+// ── animation loop ────────────────────────────────────────
+let pulseT = 0;
+
+function frame() {
+  requestAnimationFrame(frame);
+  pulseT += 0.02;
+
+  ctx.fillStyle = COL.bg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const { sc, ox, oy } = getTransform();
+
+  // ── compute outer rects ──
+  const tradRect  = getTradRect();
+  const aivoxRect = getAivoxRect();
+  const titleX    = 5;   // left edge of titles
+
+  // ── OUTER FILLET RECTS — drawn first, under nodes ──
+  drawRoundedRectTrack(tradRect,  COL.textDim, sc, ox, oy, {alpha:0.2, lw:1.4});
+  drawRoundedRectTrack(aivoxRect, COL.design,  sc, ox, oy, {alpha:0.2, lw:1.4});
+
+  // ── TITLES — centered to rect mid-y, connector to rect left edge ──
+  const tradMidY = trY;      // align to the node row, not the rect center
+  const avMidY   = aivoxRect.y + aivoxRect.h / 2;
+  const fontSize = 20;  // viewbox units
+
+  // measure text width using canvas (accurate)
+  ctx.font = `400 ${fontSize * sc}px 'JetBrains Mono', monospace`;
+  const tradTW = ctx.measureText('TRADITIONAL').width / sc;  // back to viewbox units
+  const avTW   = ctx.measureText('AIVOX').width / sc;
+
+  // TRADITIONAL
+  drawLabel('TRADITIONAL', titleX, tradMidY, COL.textDim, sc, ox, oy, {size:fontSize, align:'left', alpha:0.65, weight:400, baseline:'middle'});
+  ctx.save();
+  ctx.strokeStyle = COL.textDim; ctx.globalAlpha = 0.35; ctx.lineWidth = 1*sc;
+  ctx.beginPath();
+  ctx.moveTo((titleX + tradTW + 10)*sc+ox, tradMidY*sc+oy);
+  ctx.lineTo(tradRect.x*sc+ox,             tradMidY*sc+oy);
+  ctx.stroke();
+  ctx.restore();
+
+  // AIVOX
+  drawLabel('AIVOX', titleX, avMidY, COL.design, sc, ox, oy, {size:fontSize, align:'left', alpha:0.8, weight:400, baseline:'middle'});
+  ctx.save();
+  ctx.strokeStyle = COL.design; ctx.globalAlpha = 0.35; ctx.lineWidth = 1*sc;
+  ctx.beginPath();
+  ctx.moveTo((titleX + avTW + 10)*sc+ox, avMidY*sc+oy);
+  ctx.lineTo(aivoxRect.x*sc+ox,          avMidY*sc+oy);
+  ctx.stroke();
+  ctx.restore();
+
+  // ══ TRADITIONAL ROW ══
+  drawArrow(trad.design, trad.eng, COL.lineGrey, sc, ox, oy, {alpha:0.55, lw:1.6});
+  drawArrow(trad.eng, trad.proto, COL.lineGrey, sc, ox, oy, {alpha:0.55, lw:1.6});
+
+  // error bounce between proto and rationalize — double-headed dashed line
+  const errAlpha = 0.5 + 0.18 * Math.sin(pulseT*2.5);
+  drawArrow(trad.proto, trad.rationalize, COL.errorPurple, sc, ox, oy, {alpha:errAlpha, dashed:true, lw:1.6});
+  drawArrow(trad.rationalize, trad.proto, COL.errorPurple, sc, ox, oy, {alpha:errAlpha, dashed:true, lw:1.6});
+  drawLabel('ERROR LOOP', trad.proto.x + 60, (trad.proto.y+trad.rationalize.y)/2, COL.errorPurple, sc, ox, oy, {size:9, align:'left', alpha:0.6});
+
+  // rare escape proto -> build
+  drawArrow(trad.proto, trad.build, COL.lineGrey, sc, ox, oy, {alpha:0.4, dashed:true, lw:1.6});
+
+  // build -> engineering restart loop (dips below)
+  const restartAlpha = 0.4 + 0.12 * Math.sin(pulseT*1.8);
+  drawLoopArcPathDown(trad.build, trad.eng, COL.lineGrey, sc, ox, oy, {alpha: restartAlpha, lw:1.6});
+  drawLabel(['RESTART IF', 'UNRESOLVED'], trad.rationalize.x, trad.rationalize.y + trad.rationalize.r + 20, COL.textDim, sc, ox, oy, {size:9, align:'center', alpha:0.45});
+  drawCircleNode(trad.design, COL.design, sc, ox, oy, {alpha:0.7});
+  drawCircleNode(trad.eng, COL.eng, sc, ox, oy, {alpha:0.7});
+  drawCircleNode(trad.proto, COL.errorPurple, sc, ox, oy, {alpha:0.75});
+  drawCircleNode(trad.rationalize, COL.errorPurple, sc, ox, oy, {dashed:true, alpha:0.65});
+  drawRectNode(trad.build, tradBall.everSucceeded ? COL.buildGood : COL.buildBad, sc, ox, oy, {alpha:0.6});
+
+  // single project ball — traditional
+  tradBall.update();
+  drawParticle(tradBall.getPos(), tradBall.color(), sc, ox, oy, 4.2);
+
+  // ══ AIVOX ROW ══
+  drawArrow(aivox.proto, aivox.build, COL.lineGrey, sc, ox, oy, {alpha:0.45, lw:1.6});
+  const trackExit = { x: track.x + track.w, y: aivox.proto.y };
+  drawArrow(trackExit, aivox.proto, COL.errorPurple, sc, ox, oy, {alpha:0.35, dashed:true, lw:1.6});
+
+  // rounded-rect track that the ball loops around (design / engrat / fab)
+  const trackAlpha = 0.5 + 0.18 * Math.sin(pulseT*2.2);
+  drawRoundedRectTrack(track, COL.lineGrey, sc, ox, oy, {alpha: trackAlpha, lw:1.8});
+
+  // VENN: draw as overlapping semi-transparent circles
+  drawVennNode(aivox.design, COL.design, sc, ox, oy);
+  drawVennNode(aivox.engrat, COL.eng, sc, ox, oy);
+  drawVennNode(aivox.fab, COL.fab, sc, ox, oy);
+  drawCircleNode(aivox.proto, COL.errorPurple, sc, ox, oy, {glow:true, alpha:0.85});
+  drawRectNode(aivox.build, COL.buildGood, sc, ox, oy, {glow:true, alpha:0.9});
+
+  // single project ball — aivox
+  aivoxBall.update();
+  drawParticle(aivoxBall.getPos(), aivoxBall.color(), sc, ox, oy, 4.2);
+
+  // bottom gradient rule
+}
+
+frame();
+</script>
+</body>
+</html>
